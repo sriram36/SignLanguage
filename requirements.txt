@@ -14,3 +14,4 @@ jaxlib==0.4.34
 scipy==1.17.0
 protobuf==4.25.8
 sounddevice==0.5.3
+gunicorn==23.0.0

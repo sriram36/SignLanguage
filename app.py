@@ -1,6 +1,7 @@
 import base64
 import io
 import math
+from collections import deque
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -16,6 +17,8 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "cnn8grps_rad1_model.h5"
 CANVAS = 400
 OFFSET = 29
+CONF_THRESHOLD = 0.6
+SMOOTH_WINDOW = 5
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -25,8 +28,8 @@ mp_hands = mp.solutions.hands.Hands(
     static_image_mode=True,
     max_num_hands=1,
     model_complexity=1,
-    min_detection_confidence=0.3,
-    min_tracking_confidence=0.3,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5,
 )
 
 
@@ -37,6 +40,7 @@ def load_sign_model():
 
 
 model = load_sign_model()
+recent_chars: deque[str] = deque(maxlen=SMOOTH_WINDOW)
 
 
 def distance(a: Tuple[int, int], b: Tuple[int, int]) -> float:
@@ -45,6 +49,7 @@ def distance(a: Tuple[int, int], b: Tuple[int, int]) -> float:
 
 def draw_skeleton(img_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[List[Tuple[int, int]]]]:
     """Run hand detection and render a 400x400 skeleton image."""
+    img_bgr = cv2.flip(img_bgr, 1)
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     h, w, _ = img_rgb.shape
     results = mp_hands.process(img_rgb)
@@ -105,6 +110,8 @@ def draw_skeleton(img_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[L
 def predict_character(skel_img: np.ndarray, pts: List[Tuple[int, int]]) -> Optional[str]:
     white = skel_img.reshape(1, CANVAS, CANVAS, 3)
     prob = np.array(model.predict(white)[0], dtype="float32")
+    if float(np.max(prob)) < CONF_THRESHOLD:
+        return None
     ch1 = int(np.argmax(prob, axis=0))
     prob[ch1] = 0
     ch2 = int(np.argmax(prob, axis=0))
@@ -460,7 +467,15 @@ def api_predict():
         char = predict_character(skeleton, pts)
         if not char:
             return jsonify({"error": "could not classify"}), 422
-        return jsonify({"char": char})
+        recent_chars.append(char)
+        if recent_chars:
+            counts = {}
+            for c in recent_chars:
+                counts[c] = counts.get(c, 0) + 1
+            smooth_char = max(counts, key=counts.get)
+        else:
+            smooth_char = char
+        return jsonify({"char": smooth_char})
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": str(exc)}), 500
 

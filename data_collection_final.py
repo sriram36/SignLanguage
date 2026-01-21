@@ -1,38 +1,55 @@
+
 import cv2
 from cvzone.HandTrackingModule import HandDetector
 import numpy as np
 import os as oss
 import traceback
 
-
-
 capture = cv2.VideoCapture(0)
 hd = HandDetector(maxHands=1)
 hd2 = HandDetector(maxHands=1)
 
-count = len(oss.listdir("D:\\sign2text_dataset_3.0\\AtoZ_3.0\\A\\"))
+# Use local dataset directory
+dataset_base = "AtoZ_3.1"
 c_dir = 'A'
+count = len(oss.listdir(oss.path.join(dataset_base, c_dir)))
 
 offset = 15
 step = 1
-flag=False
-suv=0
+flag = False
+suv = 0
 
-white=np.ones((400,400),np.uint8)*255
-cv2.imwrite("C:\\Users\\devansh raval\\PycharmProjects\\pythonProject\\white.jpg",white)
+white = np.ones((400, 400), np.uint8) * 255
+cv2.imwrite("white.jpg", white)
 
 
 while True:
     try:
-        _, frame = capture.read()
+
+        ret, frame = capture.read()
+        if not ret or frame is None:
+            print("Failed to grab frame from camera.")
+            continue
         frame = cv2.flip(frame, 1)
-        hands= hd.findHands(frame, draw=False, flipType=True)
-        white = cv2.imread("C:\\Users\\devansh raval\\PycharmProjects\\pythonProject\\white.jpg")
+        hands = hd.findHands(frame, draw=False, flipType=True)
+        white = cv2.imread("white.jpg")
+
 
         if hands:
             hand = hands[0]
-            x, y, w, h = hand['bbox']
-            image =np.array( frame[y - offset:y + h + offset, x - offset:x + w + offset])
+            print('DEBUG hand:', hand)  # Debug print to inspect structure
+            if hand:  # Only process if hand is not empty
+                if isinstance(hand, dict) and 'bbox' in hand:
+                    x, y, w, h = hand['bbox']
+                elif isinstance(hand, (list, tuple)) and len(hand) > 0 and isinstance(hand[0], dict) and 'bbox' in hand[0]:
+                    x, y, w, h = hand[0]['bbox']
+                else:
+                    print(f"Skipping frame, unexpected hand structure: {hand}")
+                    continue
+                image = np.array(frame[y - offset:y + h + offset, x - offset:x + w + offset])
+            else:
+                # No hand detected in this frame
+                continue
 
             handz,imz = hd2.findHands(image, draw=True, flipType=True)
             if handz:
@@ -81,7 +98,7 @@ while True:
             if ord(c_dir)==ord('Z')+1:
                 c_dir='A'
             flag = False
-            count = len(oss.listdir("D:\\sign2text_dataset_3.0\\AtoZ_3.0\\" + (c_dir) + "\\"))
+            count = len(oss.listdir(oss.path.join(dataset_base, c_dir)))
 
         if interrupt & 0xFF == ord('a'):
             if flag:
@@ -96,8 +113,9 @@ while True:
             if suv==180:
                 flag=False
             if step%3==0:
-                cv2.imwrite("D:\\sign2text_dataset_3.0\\AtoZ_3.1\\" + (c_dir) + "\\" + str(count) + ".jpg",
-                            skeleton1)
+
+                save_path = oss.path.join(dataset_base, c_dir, f"{count}.jpg")
+                cv2.imwrite(save_path, skeleton1)
 
                 count += 1
                 suv += 1

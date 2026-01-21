@@ -1,0 +1,16 @@
+flask==3.1.2
+tensorflow==2.15.0
+keras==2.15.0
+mediapipe==0.10.14
+cvzone==1.6.1
+opencv-python==4.11.0.86
+opencv-contrib-python==4.11.0.86
+numpy==1.26.4
+pillow==12.1.0
+pyttsx3==2.99
+pyenchant==3.3.0
+jax==0.4.34
+jaxlib==0.4.34
+scipy==1.17.0
+protobuf==4.25.8
+sounddevice==0.5.3

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Language Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: radial-gradient(circle at 20% 20%, #f6f7ff 0, #eef2ff 30%, #e7f9ff 60%, #fefefe 100%);
+      --card: rgba(255, 255, 255, 0.72);
+      --text: #0f172a;
+      --accent: #0ea5e9;
+      --border: #e2e8f0;
+      --muted: #475569;
+      --shadow: 0 30px 80px rgba(15, 23, 42, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; padding: 32px;
+    }
+    .shell {
+      width: min(1200px, 100%); display: grid; gap: 24px; grid-template-columns: 1fr 340px;
+    }
+    .panel {
+      background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 20px;
+      box-shadow: var(--shadow); backdrop-filter: blur(10px);
+    }
+    header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    h1 { font-size: 28px; margin: 0; letter-spacing: -0.5px; }
+    .pill { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+    .video-wrap { position: relative; overflow: hidden; border-radius: 16px; background: #0f172a; }
+    video, canvas { width: 100%; height: 100%; display: block; }
+    .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    button {
+      border: none; border-radius: 12px; padding: 12px 16px; font-weight: 600; cursor: pointer;
+      background: var(--accent); color: white; box-shadow: 0 12px 30px rgba(14, 165, 233, 0.35);
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+    }
+    button:active { transform: translateY(1px); box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25); }
+    .ghost { background: white; color: var(--text); border: 1px solid var(--border); box-shadow: none; }
+    .output { display: grid; gap: 12px; }
+    .tile { padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--border); background: white; font-size: 24px; font-weight: 700; min-height: 62px; display: flex; align-items: center; justify-content: center; }
+    .log { font-family: "SFMono-Regular", Consolas, monospace; background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 12px; height: 200px; overflow: auto; }
+    @media (max-width: 960px) { .shell { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <div class="pill">Live ASL to Text</div>
+        <h1>Camera → Sign → Character</h1>
+      </div>
+      <div class="pill" id="status">Idle</div>
+    </header>
+
+    <div class="panel">
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+      </div>
+      <div class="controls">
+        <button id="start">Start Camera</button>
+        <button id="snap" class="ghost">Send Frame</button>
+        <button id="loop" class="ghost">Auto (2 fps)</button>
+      </div>
+    </div>
+
+    <div class="panel output">
+      <div class="tile" id="char">–</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const logEl = document.getElementById('log');
+    const charEl = document.getElementById('char');
+    const statusEl = document.getElementById('status');
+    let stream = null;
+    let loopId = null;
+
+    function log(line) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent = `[${ts}] ${line}\n` + logEl.textContent;
+    }
+
+    async function startCamera() {
+      if (stream) return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        video.srcObject = stream;
+        statusEl.textContent = 'Camera on';
+        log('Camera started.');
+      } catch (err) {
+        log('Camera error: ' + err.message);
+        statusEl.textContent = 'Camera error';
+      }
+    }
+
+    function captureFrame() {
+      if (!video.videoWidth) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.85);
+    }
+
+    async function sendFrame() {
+      const dataUrl = captureFrame();
+      if (!dataUrl) {
+        log('No frame ready yet.');
+        return;
+      }
+      statusEl.textContent = 'Predicting…';
+      try {
+        const res = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: dataUrl })
+        });
+        const body = await res.json();
+        if (res.ok) {
+          charEl.textContent = body.char || '–';
+          log('Prediction: ' + (body.char || 'none'));
+          statusEl.textContent = 'Ready';
+        } else {
+          log('Error: ' + (body.error || res.status));
+          statusEl.textContent = 'Error';
+        }
+      } catch (err) {
+        log('Network error: ' + err.message);
+        statusEl.textContent = 'Error';
+      }
+    }
+
+    document.getElementById('start').onclick = startCamera;
+    document.getElementById('snap').onclick = sendFrame;
+    document.getElementById('loop').onclick = () => {
+      if (loopId) {
+        clearInterval(loopId); loopId = null; log('Auto capture stopped.'); statusEl.textContent = 'Idle'; return;
+      }
+      log('Auto capture started.'); statusEl.textContent = 'Auto';
+      loopId = setInterval(sendFrame, 500);
+    };
+  </script>
+</body>
+</html>

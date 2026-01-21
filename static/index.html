@@ -3,89 +3,290 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign Language Live</title>
+  <title>Sign Language To Text Conversion</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: radial-gradient(circle at 20% 20%, #f6f7ff 0, #eef2ff 30%, #e7f9ff 60%, #fefefe 100%);
-      --card: rgba(255, 255, 255, 0.72);
-      --text: #0f172a;
-      --accent: #0ea5e9;
-      --border: #e2e8f0;
-      --muted: #475569;
-      --shadow: 0 30px 80px rgba(15, 23, 42, 0.12);
+      --bg: #0b1220;
+      --panel: rgba(255, 255, 255, 0.06);
+      --text: #e5e7eb;
+      --accent: #7dd3fc;
+      --border: rgba(255, 255, 255, 0.12);
+      --muted: #94a3b8;
+      --btn-bg: rgba(255,255,255,0.04);
+      --btn-border: rgba(255, 255, 255, 0.16);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0; min-height: 100vh; font-family: 'Space Grotesk', sans-serif;
-      background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; padding: 32px;
+      font-family: 'Courier Prime', monospace;
+      background: var(--bg);
+      color: var(--text);
+      padding: 12px;
+      min-height: 100vh;
     }
-    .shell {
-      width: min(1200px, 100%); display: grid; gap: 24px; grid-template-columns: 1fr 340px;
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding: 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      backdrop-filter: blur(14px);
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 1px;
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 520px 440px 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
     }
     .panel {
-      background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 20px;
-      box-shadow: var(--shadow); backdrop-filter: blur(10px);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(14px);
     }
-    header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    h1 { font-size: 28px; margin: 0; letter-spacing: -0.5px; }
-    .pill { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 14px; }
-    .video-wrap { position: relative; overflow: hidden; border-radius: 16px; background: #0f172a; }
-    video, canvas { width: 100%; height: 100%; display: block; }
-    .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    .video-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .video-box {
+      position: relative;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      width: 100%;
+      height: 360px;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     button {
-      border: none; border-radius: 12px; padding: 12px 16px; font-weight: 600; cursor: pointer;
-      background: var(--accent); color: white; box-shadow: 0 12px 30px rgba(14, 165, 233, 0.35);
-      transition: transform 0.1s ease, box-shadow 0.2s ease;
+      background: var(--btn-bg);
+      color: #fff;
+      border: 1px solid var(--btn-border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-family: 'Courier Prime', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
     }
-    button:active { transform: translateY(1px); box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25); }
-    .ghost { background: white; color: var(--text); border: 1px solid var(--border); box-shadow: none; }
-    .output { display: grid; gap: 12px; }
-    .tile { padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--border); background: white; font-size: 24px; font-weight: 700; min-height: 62px; display: flex; align-items: center; justify-content: center; }
-    .log { font-family: "SFMono-Regular", Consolas, monospace; background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 12px; height: 200px; overflow: auto; }
-    @media (max-width: 960px) { .shell { grid-template-columns: 1fr; } }
+    button:hover {
+      background: rgba(255,255,255,0.08);
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button.primary {
+      background: var(--accent);
+      color: #0b1220;
+      border-color: var(--accent);
+    }
+    button.primary:hover {
+      background: #93ddfd;
+    }
+    .skeleton-panel {
+      height: 440px;
+    }
+    .skeleton-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .skeleton-box img {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+    }
+    .info-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .info-label {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .info-value {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+    }
+    .sentence-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sentence-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 18px;
+      color: #fff;
+      min-height: 100px;
+      word-wrap: break-word;
+      line-height: 1.6;
+    }
+    .suggestions-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .suggestions-label {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ff6b6b;
+    }
+    .suggestions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .suggestion-btn {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 10px;
+      font-size: 14px;
+      text-align: center;
+      word-wrap: break-word;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .action-buttons button {
+      flex: 1;
+      font-size: 16px;
+      padding: 14px;
+    }
+    .status-bar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      backdrop-filter: blur(14px);
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    @media (max-width: 1200px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="shell">
+  <div class="container">
     <header>
-      <div>
-        <div class="pill">Live ASL to Text</div>
-        <h1>Camera → Sign → Character</h1>
-      </div>
-      <div class="pill" id="status">Idle</div>
+      <h1>Sign Language To Text Conversion</h1>
     </header>
 
-    <div class="panel">
-      <div class="video-wrap">
-        <video id="video" autoplay playsinline muted></video>
+    <div class="main-grid">
+      <div class="video-panel panel">
+        <div class="video-box">
+          <video id="video" autoplay playsinline muted></video>
+        </div>
+        <div class="controls">
+          <button id="start" class="primary">Start Camera</button>
+          <button id="snap">Send Frame</button>
+          <button id="loop">Auto Capture (2 fps)</button>
+        </div>
       </div>
-      <div class="controls">
-        <button id="start">Start Camera</button>
-        <button id="snap" class="ghost">Send Frame</button>
-        <button id="loop" class="ghost">Auto (2 fps)</button>
+
+      <div class="skeleton-panel panel">
+        <div class="skeleton-box" id="skeletonBox">
+          <span style="color: var(--muted);">Hand skeleton will appear here</span>
+        </div>
+      </div>
+
+      <div class="info-panel panel">
+        <div class="info-row">
+          <span class="info-label">Character:</span>
+          <div class="info-value" id="char">–</div>
+        </div>
+        
+        <div class="sentence-row">
+          <span class="info-label">Sentence:</span>
+          <div class="sentence-box" id="sentence"></div>
+        </div>
+
+        <div class="suggestions-section">
+          <span class="suggestions-label">Suggestions:</span>
+          <div class="suggestions-grid" id="suggestions"></div>
+        </div>
+
+        <div class="action-buttons">
+          <button id="speak" class="primary">Speak</button>
+          <button id="clear">Clear</button>
+        </div>
       </div>
     </div>
 
-    <div class="panel output">
-      <div class="tile" id="char">–</div>
-      <div class="log" id="log"></div>
-    </div>
+    <div class="status-bar" id="status">Ready to start</div>
   </div>
 
   <script>
     const video = document.getElementById('video');
-    const logEl = document.getElementById('log');
     const charEl = document.getElementById('char');
+    const sentenceEl = document.getElementById('sentence');
+    const suggestionsEl = document.getElementById('suggestions');
+    const skeletonBox = document.getElementById('skeletonBox');
     const statusEl = document.getElementById('status');
     let stream = null;
     let loopId = null;
+    let sessionId = localStorage.getItem('session_id') || null;
 
-    function log(line) {
-      const ts = new Date().toLocaleTimeString();
-      logEl.textContent = `[${ts}] ${line}\n` + logEl.textContent;
+    function updateStatus(msg) {
+      statusEl.textContent = msg;
     }
 
     async function startCamera() {
@@ -93,11 +294,9 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         video.srcObject = stream;
-        statusEl.textContent = 'Camera on';
-        log('Camera started.');
+        updateStatus('Camera started. Ready to capture.');
       } catch (err) {
-        log('Camera error: ' + err.message);
-        statusEl.textContent = 'Camera error';
+        updateStatus('Camera error: ' + err.message);
       }
     }
 
@@ -114,28 +313,93 @@
     async function sendFrame() {
       const dataUrl = captureFrame();
       if (!dataUrl) {
-        log('No frame ready yet.');
+        updateStatus('No frame ready yet.');
         return;
       }
-      statusEl.textContent = 'Predicting…';
+      updateStatus('Predicting…');
       try {
         const res = await fetch('/api/predict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: dataUrl })
+          body: JSON.stringify({ image: dataUrl, session_id: sessionId })
         });
         const body = await res.json();
         if (res.ok) {
           charEl.textContent = body.char || '–';
-          log('Prediction: ' + (body.char || 'none'));
-          statusEl.textContent = 'Ready';
+          sessionId = body.session_id || sessionId;
+          localStorage.setItem('session_id', sessionId);
+          sentenceEl.textContent = body.sentence || '';
+          
+          // Show skeleton if available
+          if (body.skeleton) {
+            skeletonBox.innerHTML = `<img src="${body.skeleton}" alt="Hand Skeleton" />`;
+          }
+          
+          renderSuggestions(body.suggestions || []);
+          updateStatus('Prediction complete');
         } else {
-          log('Error: ' + (body.error || res.status));
-          statusEl.textContent = 'Error';
+          updateStatus('Error: ' + (body.error || res.status));
         }
       } catch (err) {
-        log('Network error: ' + err.message);
-        statusEl.textContent = 'Error';
+        updateStatus('Network error: ' + err.message);
+      }
+    }
+
+    function renderSuggestions(list) {
+      suggestionsEl.innerHTML = '';
+      if (list.length === 0) {
+        for (let i = 0; i < 4; i++) {
+          const btn = document.createElement('button');
+          btn.className = 'suggestion-btn';
+          btn.textContent = '';
+          btn.disabled = true;
+          suggestionsEl.appendChild(btn);
+        }
+        return;
+      }
+      list.forEach(word => {
+        const btn = document.createElement('button');
+        btn.className = 'suggestion-btn';
+        btn.textContent = word;
+        btn.onclick = async () => {
+          // Replace last word in sentence with suggestion
+          let currentSentence = sentenceEl.textContent;
+          const words = currentSentence.trim().split(/\\s+/);
+          if (words.length > 0) {
+            words[words.length - 1] = word.toUpperCase();
+            const newSentence = words.join(' ');
+            sentenceEl.textContent = newSentence;
+            // Update on server
+            try {
+              await fetch('/api/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId })
+              });
+              const res2 = await fetch('/api/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  image: captureFrame(),
+                  session_id: sessionId,
+                  override_sentence: newSentence
+                })
+              });
+            } catch(e) {
+              console.error(e);
+            }
+          }
+          updateStatus('Applied suggestion: ' + word);
+        };
+        suggestionsEl.appendChild(btn);
+      });
+      // Fill remaining slots
+      for (let i = list.length; i < 4; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'suggestion-btn';
+        btn.textContent = '';
+        btn.disabled = true;
+        suggestionsEl.appendChild(btn);
       }
     }
 
@@ -143,11 +407,63 @@
     document.getElementById('snap').onclick = sendFrame;
     document.getElementById('loop').onclick = () => {
       if (loopId) {
-        clearInterval(loopId); loopId = null; log('Auto capture stopped.'); statusEl.textContent = 'Idle'; return;
+        clearInterval(loopId);
+        loopId = null;
+        updateStatus('Auto capture stopped');
+        return;
       }
-      log('Auto capture started.'); statusEl.textContent = 'Auto';
+      updateStatus('Auto capture started (2 fps)');
       loopId = setInterval(sendFrame, 500);
     };
+    
+    document.getElementById('clear').onclick = async () => {
+      try {
+        const res = await fetch('/api/clear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId })
+        });
+        const body = await res.json();
+        sessionId = body.session_id || sessionId;
+        localStorage.setItem('session_id', sessionId);
+        sentenceEl.textContent = '';
+        charEl.textContent = '–';
+        renderSuggestions([]);
+        updateStatus('Cleared sentence');
+      } catch (err) {
+        updateStatus('Clear error: ' + err.message);
+      }
+    };
+
+    document.getElementById('speak').onclick = async () => {
+      const text = sentenceEl.textContent.trim();
+      if (!text) {
+        updateStatus('No text to speak');
+        return;
+      }
+      updateStatus('Generating speech...');
+      try {
+        const res = await fetch('/api/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const body = await res.json();
+        if (res.ok && body.audio) {
+          const audio = new Audio('data:audio/mp3;base64,' + body.audio);
+          audio.play();
+          updateStatus('Speaking...');
+          audio.onended = () => updateStatus('Speech complete');
+        } else {
+          updateStatus('Speak error: ' + (body.error || 'unknown'));
+        }
+      } catch (err) {
+        updateStatus('Speak error: ' + err.message);
+      }
+    };
+
+    // Initialize
+    renderSuggestions([]);
   </script>
 </body>
 </html>

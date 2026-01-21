@@ -1,9 +1,10 @@
 import base64
 import io
 import math
+import secrets
 from collections import deque
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -11,6 +12,9 @@ from flask import Flask, jsonify, request, send_from_directory
 from keras.models import load_model
 import mediapipe as mp
 from PIL import Image
+import enchant
+from gtts import gTTS
+import tempfile
 
 # App and model setup
 BASE_DIR = Path(__file__).resolve().parent
@@ -21,6 +25,8 @@ CONF_THRESHOLD = 0.6
 SMOOTH_WINDOW = 5
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+
+eng_dict = enchant.Dict("en_US")
 
 
 # MediaPipe hands (static mode for single images)
@@ -41,6 +47,20 @@ def load_sign_model():
 
 model = load_sign_model()
 recent_chars: deque[str] = deque(maxlen=SMOOTH_WINDOW)
+sessions: Dict[str, Dict] = {}
+
+
+def get_session(session_id: Optional[str]) -> Tuple[str, Dict]:
+    if session_id and session_id in sessions:
+        return session_id, sessions[session_id]
+    sid = session_id or secrets.token_hex(8)
+    sessions[sid] = {
+        "sentence": "",
+        "prev_char": "",
+        "history": deque(maxlen=10),
+        "word": "",
+    }
+    return sid, sessions[sid]
 
 
 def distance(a: Tuple[int, int], b: Tuple[int, int]) -> float:
@@ -107,7 +127,7 @@ def draw_skeleton(img_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[L
     return canvas, pts_canvas
 
 
-def predict_character(skel_img: np.ndarray, pts: List[Tuple[int, int]]) -> Optional[str]:
+def predict_character_and_gesture(skel_img: np.ndarray, pts: List[Tuple[int, int]]) -> Optional[str]:
     white = skel_img.reshape(1, CANVAS, CANVAS, 3)
     prob = np.array(model.predict(white)[0], dtype="float32")
     if float(np.max(prob)) < CONF_THRESHOLD:
@@ -439,6 +459,37 @@ def predict_character(skel_img: np.ndarray, pts: List[Tuple[int, int]]) -> Optio
         ):
             ch1 = "R"
 
+    # detect special gestures (space, next, backspace)
+    # Space gesture: hands with specific pattern
+    if ch1 == 1 or ch1 == 'E' or ch1 == 'S' or ch1 == 'X' or ch1 == 'Y' or ch1 == 'B':
+        if (pts[6][1] > pts[8][1] and pts[10][1] < pts[12][1] and pts[14][1] < pts[16][1] and pts[18][1] > pts[20][1]):
+            ch1 = "  "  # double space as marker
+
+    # Next gesture: thumb out gesture
+    if ch1 == 'E' or ch1 == 'Y' or ch1 == 'B':
+        if (pts[4][0] < pts[5][0]) and (pts[6][1] > pts[8][1] and pts[10][1] > pts[12][1] and pts[14][1] > pts[16][1] and pts[18][1] > pts[20][1]):
+            ch1 = "next"
+
+    # Backspace gesture
+    if ch1 == 'Next' or ch1 == 'B' or ch1 == 'C' or ch1 == 'H' or ch1 == 'F' or ch1 == 'X':
+        if (
+            pts[0][0] > pts[8][0]
+            and pts[0][0] > pts[12][0]
+            and pts[0][0] > pts[16][0]
+            and pts[0][0] > pts[20][0]
+        ) and (
+            pts[4][1] < pts[8][1]
+            and pts[4][1] < pts[12][1]
+            and pts[4][1] < pts[16][1]
+            and pts[4][1] < pts[20][1]
+        ) and (
+            pts[4][1] < pts[6][1]
+            and pts[4][1] < pts[10][1]
+            and pts[4][1] < pts[14][1]
+            and pts[4][1] < pts[18][1]
+        ):
+            ch1 = "Backspace"
+
     if isinstance(ch1, str):
         return ch1
     return None
@@ -449,12 +500,45 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.route("/api/clear", methods=["POST"])
+def api_clear():
+    data = request.get_json(force=True) if request.data else {}
+    session_id_in = data.get("session_id") if isinstance(data, dict) else None
+    session_id, session = get_session(session_id_in)
+    session["sentence"] = ""
+    session["prev_char"] = ""
+    session["history"].clear()
+    session["word"] = ""
+    return jsonify({"sentence": "", "session_id": session_id})
+
+
+@app.route("/api/speak", methods=["POST"])
+def api_speak():
+    try:
+        data = request.get_json(force=True)
+        text = data.get("text", "").strip()
+        if not text:
+            return jsonify({"error": "no text"}), 400
+        
+        tts = gTTS(text=text, lang="en", slow=False)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+            tts.save(fp.name)
+            with open(fp.name, "rb") as f:
+                audio_data = base64.b64encode(f.read()).decode("utf-8")
+        
+        return jsonify({"audio": audio_data})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/predict", methods=["POST"])
 def api_predict():
     try:
         data = request.get_json(force=True)
         if not data or "image" not in data:
             return jsonify({"error": "missing image"}), 400
+        session_id_in = data.get("session_id")
+        session_id, session = get_session(session_id_in)
         payload = data["image"]
         if "," in payload:
             payload = payload.split(",", 1)[1]
@@ -464,18 +548,56 @@ def api_predict():
         skeleton, pts = draw_skeleton(frame)
         if skeleton is None or pts is None:
             return jsonify({"error": "hand not detected"}), 422
-        char = predict_character(skeleton, pts)
+        char = predict_character_and_gesture(skeleton, pts)
         if not char:
             return jsonify({"error": "could not classify"}), 422
-        recent_chars.append(char)
-        if recent_chars:
-            counts = {}
-            for c in recent_chars:
-                counts[c] = counts.get(c, 0) + 1
-            smooth_char = max(counts, key=counts.get)
-        else:
-            smooth_char = char
-        return jsonify({"char": smooth_char})
+        
+        # encode skeleton as base64 image
+        _, buffer = cv2.imencode(".png", skeleton)
+        skeleton_b64 = "data:image/png;base64," + base64.b64encode(buffer).decode("utf-8")
+        
+        history = session["history"]
+        prev_char = session["prev_char"]
+        
+        # Handle special gestures
+        if char == "next" and prev_char != "next":
+            # Get character from 2 positions back in history
+            if len(history) >= 2 and history[-2] != "next":
+                if history[-2] == "Backspace":
+                    if session["sentence"]:
+                        session["sentence"] = session["sentence"][:-1]
+                elif history[-2] != "Backspace":
+                    session["sentence"] += history[-2]
+            elif len(history) >= 1 and history[-1] != "Backspace":
+                session["sentence"] += history[-1]
+        elif char == "  " and prev_char != "  ":
+            session["sentence"] += "  "
+        elif char == "Backspace" and prev_char != "Backspace":
+            if session["sentence"]:
+                session["sentence"] = session["sentence"][:-1]
+        
+        # Update history and prev
+        history.append(char)
+        session["prev_char"] = char
+        
+        # Get current word for suggestions
+        sent = session["sentence"].strip()
+        word = sent.split()[-1] if sent else ""
+        session["word"] = word
+        suggestions: List[str] = []
+        if word and len(word) > 0:
+            try:
+                suggestions = eng_dict.suggest(word)[:4]
+            except:
+                suggestions = []
+
+        return jsonify({
+            "char": char,
+            "sentence": session["sentence"],
+            "suggestions": suggestions,
+            "skeleton": skeleton_b64,
+            "session_id": session_id,
+        })
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": str(exc)}), 500
 
